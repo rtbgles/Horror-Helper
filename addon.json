@@ -1,0 +1,9 @@
+{
+    "title": "Horror Helper: Until Sunrise",
+    "type": "gamemode",
+    "tags": [ "fun", "roleplay" ],
+    "ignore": [
+        "*.md",
+        ".git*"
+    ]
+}
