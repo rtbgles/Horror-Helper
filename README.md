@@ -82,6 +82,20 @@ and the psychological scares come more often (`hh_psych_rate`, more when you're 
 
 Turn on `hh_debug 1` to see the director's decisions in the server console.
 
+## Settings are saved per map
+
+Whatever you set (in the menu, with `hh_set`, or in the server console) is saved for the
+map you're on, a second after you change it, in `data/horror_helper/settings/<map>.json`.
+Next time that map loads, its settings come back: killer, night length, director tuning,
+everything. Cabin layouts were already saved per map.
+
+- **Use these settings as the default for other maps** (`hh_settings_save_defaults`):
+  maps with no saved settings of their own start from these.
+- **Forget this map's settings** (`hh_settings_forget_map`): back to the defaults.
+- `hh_settings_status` says where the current settings came from.
+
+Saved settings override `server.cfg` on maps that have them.
+
 ## Atmosphere
 
 Darkened map lighting (`hh_darkness`, `hh_darkness_style`), fog (`hh_fog`, `hh_fog_end`),

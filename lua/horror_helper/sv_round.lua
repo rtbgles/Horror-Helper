@@ -792,6 +792,7 @@ adminCommand( "hh_set", function( ply, _, args )
 
     local value = table.concat( args, " ", 2 )
     GetConVar( name ):SetString( value )
+    HH.ScheduleSettingsSave()
 end )
 
 adminCommand( "hh_killer_test", function( ply )

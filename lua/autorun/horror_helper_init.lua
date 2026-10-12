@@ -20,6 +20,7 @@ local CLIENT_FILES = {
 
 local SERVER_FILES = {
     "sv_util.lua",
+    "sv_settings.lua",
     "sv_cabins.lua",
     "sv_round.lua",
     "sv_stages.lua",

@@ -184,6 +184,34 @@ end
 
 --[[ Pages ]]
 
+--[[ Saved settings: where these came from, and what to do with them ]]
+
+local SOURCE_TEXT = {
+    map = "Saved for this map. Changes save automatically.",
+    defaults = "Using your defaults (this map has no saved settings yet). Change anything and it's saved for this map.",
+    none = "Nothing saved for this map yet. Change anything and it's saved for this map.",
+}
+
+local function addSavedSettings( cpanel )
+    cpanel:Help( "SAVED SETTINGS" )
+
+    local status = cpanel:Help( "" )
+    status.hhSource = nil
+    status.Think = function( self )
+        local source = GetGlobal2String( "HH_SettingsSource", "none" )
+        if source == self.hhSource then return end
+
+        self.hhSource = source
+        self:SetText( SOURCE_TEXT[source] or source )
+        self:SizeToContentsY()
+    end
+
+    cpanel:Button( "Use these settings as the default for other maps", "hh_settings_save_defaults" )
+    cpanel:ControlHelp( "Maps without their own saved settings start from these." )
+    cpanel:Button( "Forget this map's settings", "hh_settings_forget_map" )
+    cpanel:ControlHelp( "Goes back to your defaults on this map." )
+end
+
 local function buildRoundPage( cpanel )
     if not adminGate( cpanel ) then return end
 
@@ -192,6 +220,7 @@ local function buildRoundPage( cpanel )
     cpanel:Button( "Start now", "hh_start" )
     cpanel:Button( "Stop the round", "hh_stop" )
 
+    addSavedSettings( cpanel )
     addKillerPicker( cpanel )
     addCategory( cpanel, "Killer", { killer_class = true } )
 
