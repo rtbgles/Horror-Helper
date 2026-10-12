@@ -147,7 +147,7 @@ end
 local function buildDirectorPage( cpanel )
     if not adminGate( cpanel ) then return end
 
-    cpanel:Help( "The director decides when and where the killer shows up. It never sends the killer at the cabin early: the first attack waits for enough setup progress (rolled each night) or a deadline. Before that, survivors far from the cabin can run into it and must run home." )
+    cpanel:Help( "The director decides when and where the killer shows up. It appears by hh_first_contact seconds, then again at shrinking gaps: watching a survivor from the dark (and sometimes coming for them), chasing a scavenger home, or prowling around the cabin testing the boards. The full attack on the cabin waits for enough setup progress (rolled each night) or a deadline. Dread climbs all night and makes the psychological scares more frequent and nastier." )
     addCategory( cpanel, "Director" )
 
     cpanel:Help( "ATMOSPHERE" )

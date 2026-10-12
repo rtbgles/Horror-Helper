@@ -67,6 +67,11 @@ end
 
 --[[ Objectives ]]
 
+local STAGE_HEADINGS = {
+    [HH.STAGE_REGROUP] = function() return "FIND THE OTHERS" end,
+    [HH.STAGE_TO_CABIN] = function() return "GET TO " .. string.upper( GetGlobal2String( "HH_CabinName", "the cabin" ) ) end,
+}
+
 local function drawBar( x, y, w, h, frac, color )
     surface.SetDrawColor( 255, 255, 255, 18 )
     surface.DrawRect( x, y, w, h )
@@ -87,23 +92,34 @@ local function drawObjectives( ply, w, h )
     local boardsMax = GetGlobal2Int( "HH_BoardsMax", 0 )
     local powered = GetGlobal2Bool( "HH_Power", false )
 
+    local stage = HH.GetStage()
+    local preparing = stage == HH.STAGE_PREPARE
+    local heading = STAGE_HEADINGS[stage]
+
     local rows = 1
-    if fusesNeeded > 0 then rows = rows + 1 end
-    if boardsMax > 0 then rows = rows + 1 end
+    if heading then rows = rows + 1 end
+    if preparing and fusesNeeded > 0 then rows = rows + 1 end
+    if preparing and boardsMax > 0 then rows = rows + 1 end
 
     draw.RoundedBox( 4, x, y, boxW, pad + rows * lineH * 1.45, PALETTE.panel )
 
     local cx = x + pad * 0.7
     local cy = y + pad * 0.6
 
-    if fusesNeeded > 0 then
-        local label = powered and "POWER  ON" or string.format( "POWER  %d / %d fuses", fusesIn, fusesNeeded )
+    if heading then
+        draw.SimpleText( heading(), "HH_Small", cx, cy, PALETTE.blood )
+        cy = cy + lineH * 1.45
+    end
+
+    if preparing and fusesNeeded > 0 then
+        local cut = CurTime() < GetGlobal2Float( "HH_PowerCutUntil", 0 )
+        local label = powered and ( cut and "POWER  OUT" or "POWER  ON" ) or string.format( "POWER  %d / %d fuses", fusesIn, fusesNeeded )
         draw.SimpleText( label, "HH_Small", cx, cy, powered and PALETTE.good or PALETTE.text )
         drawBar( cx, cy + lineH, boxW - pad * 1.4, barH, fusesIn / fusesNeeded, powered and PALETTE.good or PALETTE.blood )
         cy = cy + lineH * 1.45
     end
 
-    if boardsMax > 0 then
+    if preparing and boardsMax > 0 then
         draw.SimpleText( string.format( "BARRICADES  %d / %d boards", boards, boardsMax ), "HH_Small", cx, cy, PALETTE.text )
         drawBar( cx, cy + lineH, boxW - pad * 1.4, barH, boards / boardsMax, PALETTE.blood )
         cy = cy + lineH * 1.45
@@ -120,6 +136,100 @@ local function drawClock( w, h )
     local text = formatTime( remaining ) .. "  UNTIL SUNRISE"
 
     HH.ShadowText( text, "HH_Small", w * 0.5, h * 0.025, PALETTE.dim, TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP )
+end
+
+--[[ Things in the world: the cabin once it's revealed, voices you heard ]]
+
+local UNITS_TO_METERS = 0.01905
+local EDGE_MARGIN = 0.08 -- off-screen markers sit this far in from the screen edge
+
+-- Where on screen a world position is, pinned to the edge when it's off screen or behind you.
+local function screenPoint( pos, w, h )
+    local scr = pos:ToScreen()
+    local margin = h * EDGE_MARGIN
+    if scr.visible and scr.x > margin and scr.x < w - margin and scr.y > margin and scr.y < h - margin then
+        return scr.x, scr.y, true
+    end
+
+    local dir = pos - EyePos()
+    local ang = EyeAngles()
+    local right = dir:Dot( ang:Right() )
+    local up = dir:Dot( ang:Up() )
+    local theta = math.atan2( -up, right )
+
+    return w * 0.5 + math.cos( theta ) * ( w * 0.5 - margin ), h * 0.5 + math.sin( theta ) * ( h * 0.5 - margin ), false
+end
+
+local function drawDiamond( x, y, size, color )
+    surface.SetDrawColor( color.r, color.g, color.b, color.a )
+    draw.NoTexture()
+    surface.DrawPoly( {
+        { x = x, y = y - size },
+        { x = x + size, y = y },
+        { x = x, y = y + size },
+        { x = x - size, y = y },
+    } )
+end
+
+local markerColor = Color( 0, 0, 0 )
+
+local function drawCabinMarker( ply, w, h )
+    local stage = HH.GetStage()
+    if stage ~= HH.STAGE_TO_CABIN and stage ~= HH.STAGE_PREPARE then return end
+
+    local center = GetGlobal2Vector( "HH_CabinCenter", vector_origin )
+    local dist = ply:GetPos():Distance( center )
+    -- Once you're set up there, it's only shown while you're away from it.
+    if stage == HH.STAGE_PREPARE and dist < GetGlobal2Float( "HH_CabinRadius", 600 ) then return end
+
+    local x, y = screenPoint( center + Vector( 0, 0, 72 ), w, h )
+    local alpha = stage == HH.STAGE_TO_CABIN and 230 or 120
+    local col = PALETTE.good
+    markerColor.r, markerColor.g, markerColor.b, markerColor.a = col.r, col.g, col.b, alpha
+
+    drawDiamond( x, y, h * 0.008, markerColor )
+    local label = string.format( "%s  %dm", GetGlobal2String( "HH_CabinName", "Cabin" ), math.Round( dist * UNITS_TO_METERS ) )
+    HH.ShadowText( label, "HH_Tiny", x, y + h * 0.014, markerColor, TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP )
+end
+
+local function drawCalls( w, h )
+    local calls, showTime = HH.Cl.ActiveCalls()
+
+    for _, call in ipairs( calls ) do
+        local fade = 1 - ( CurTime() - call.at ) / showTime
+        local x, y = screenPoint( call.pos, w, h )
+        local col = ColorAlpha( PALETTE.text, 200 * fade )
+
+        HH.ShadowText( call.name .. "  calling out", "HH_Small", x, y, col, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER )
+    end
+end
+
+-- The edges of the world close in as dread rises.
+local gradients = {
+    l = Material( "vgui/gradient-l" ),
+    r = Material( "vgui/gradient-r" ),
+    u = Material( "vgui/gradient-u" ),
+    d = Material( "vgui/gradient-d" ),
+}
+local VIGNETTE_MAX_ALPHA = 210
+
+local function drawVignette( w, h )
+    local dread = HH.GetDread() * ( 1 - HH.DawnFraction() )
+    if dread <= 0.05 then return end
+
+    local alpha = VIGNETTE_MAX_ALPHA * dread
+    local side = w * Lerp( dread, 0.08, 0.22 )
+    local band = h * Lerp( dread, 0.08, 0.22 )
+
+    surface.SetDrawColor( 0, 0, 0, alpha )
+    surface.SetMaterial( gradients.l )
+    surface.DrawTexturedRect( 0, 0, side, h )
+    surface.SetMaterial( gradients.r )
+    surface.DrawTexturedRect( w - side, 0, side, h )
+    surface.SetMaterial( gradients.u )
+    surface.DrawTexturedRect( 0, 0, w, band )
+    surface.SetMaterial( gradients.d )
+    surface.DrawTexturedRect( 0, h - band, w, band )
 end
 
 --[[ What pressing E would do ]]
@@ -223,6 +333,9 @@ hook.Add( "HUDPaint", "HorrorHelper_HUD", function()
         local remaining = GetGlobal2Float( "HH_PhaseEnd", 0 ) - now
         HH.ShadowText( "Watching the others.  Sunrise in " .. formatTime( remaining ), "HH_Small", w * 0.5, h * 0.15, PALETTE.dim, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER )
     elseif ply:Alive() then
+        drawVignette( w, h )
+        drawCabinMarker( ply, w, h )
+        drawCalls( w, h )
         drawClock( w, h )
         drawObjectives( ply, w, h )
 

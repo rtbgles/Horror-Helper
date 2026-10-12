@@ -22,6 +22,8 @@ local SERVER_FILES = {
     "sv_util.lua",
     "sv_cabins.lua",
     "sv_round.lua",
+    "sv_stages.lua",
+    "sv_dread.lua",
     "sv_director.lua",
 }
 

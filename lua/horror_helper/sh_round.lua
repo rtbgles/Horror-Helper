@@ -16,6 +16,15 @@ function HH.InRound()
     return phase == HH.PHASE_INTRO or phase == HH.PHASE_NIGHT or phase == HH.PHASE_RESULTS
 end
 
+function HH.GetStage()
+    return GetGlobal2Int( "HH_Stage", HH.STAGE_NONE )
+end
+
+-- 0..1, how bad the night has got. The server works it out; everything scary scales with it.
+function HH.GetDread()
+    return GetGlobal2Float( "HH_Dread", 0 )
+end
+
 function HH.IsOut( ply )
     return ply:GetNW2Bool( "HH_Out", false )
 end

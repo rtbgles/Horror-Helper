@@ -12,6 +12,10 @@ local DAWN_BLEND_TIME = 120 -- the last two minutes of the night: fog thins, sky
 local NIGHT_FOG_DENSITY = 0.97
 local DAWN_FOG_DENSITY = 0.6
 local DAWN_FOG_STRETCH = 3 -- fog reaches this many times further at sunrise
+local DREAD_FOG_CLOSE = 0.6 -- at full dread the fog sits at this fraction of its normal distance
+local DREAD_PULSE_FROM = 0.7 -- above this dread you can hear your own pulse even with nothing near
+local DREAD_PULSE_GAP = 1.7
+local DREAD_PULSE_VOLUME = 0.22
 
 local HEARTBEAT_RANGE = 1300
 local HEARTBEAT_SLOW = 1.15
@@ -37,6 +41,9 @@ local SIGHT_FADE_TIME = 0.35
 local PHANTOM_STEP_GAP = 0.42
 local PHANTOM_START_DIST = 230
 local PHANTOM_STEP_CLOSER = 32
+local BREATH_BEHIND = 28
+local CALL_LEVEL = 95
+local CALL_SHOW_TIME = 3.5
 
 HH.Flicker = HH.Flicker or { untilTime = 0 }
 HH.Cl = HH.Cl or {}
@@ -108,7 +115,7 @@ end )
 
 local function fogValues( scale )
     local dawn = HH.DawnFraction()
-    local fogEnd = HH.CV.fog_end:GetFloat()
+    local fogEnd = HH.CV.fog_end:GetFloat() * Lerp( HH.GetDread(), 1, DREAD_FOG_CLOSE )
     fogEnd = Lerp( dawn, fogEnd, fogEnd * DAWN_FOG_STRETCH )
 
     render.FogMode( MATERIAL_FOG_LINEAR )
@@ -166,11 +173,12 @@ hook.Add( "RenderScreenspaceEffects", "HorrorHelper_Grade", function()
     if not isNightPhase() then return end
 
     local dawn = HH.DawnFraction()
-    -- Drained and a touch blue at night; fear pulls the colour out further.
+    local dread = HH.GetDread() * ( 1 - dawn )
+    -- Drained and a touch blue at night; dread and fear pull the colour out further.
     grade["$pp_colour_addb"] = Lerp( dawn, 0.012, 0 )
-    grade["$pp_colour_brightness"] = Lerp( dawn, -0.02, 0 ) - fear * 0.02
-    grade["$pp_colour_contrast"] = 1.04 + fear * 0.08
-    grade["$pp_colour_colour"] = Lerp( dawn, 0.62, 0.9 ) - fear * 0.25
+    grade["$pp_colour_brightness"] = Lerp( dawn, -0.02, 0 ) - fear * 0.02 - dread * 0.02
+    grade["$pp_colour_contrast"] = 1.04 + fear * 0.08 + dread * 0.06
+    grade["$pp_colour_colour"] = Lerp( dawn, 0.62, 0.9 ) - fear * 0.25 - dread * 0.22
 
     DrawColorModify( grade )
 end )
@@ -366,6 +374,54 @@ local function phantomSteps()
     end
 end
 
+--[[ Voices in the dark: survivors calling out (or something that sounds like them) ]]
+
+HH.Cl.Calls = HH.Cl.Calls or {}
+
+net.Receive( "HH_Call", function()
+    local pos = net.ReadVector()
+    local name = net.ReadString()
+    local path = net.ReadString()
+
+    if path ~= "" and file.Exists( "sound/" .. path, "GAME" ) then
+        sound.Play( path, pos, CALL_LEVEL, math.random( 96, 104 ), 1 )
+    end
+
+    -- Remember where it came from so the HUD can say which way (the caller doesn't need it).
+    local ply = LocalPlayer()
+    if IsValid( ply ) and pos:Distance( ply:EyePos() ) > 64 then
+        table.insert( HH.Cl.Calls, { pos = pos, name = name, at = CurTime() } )
+    end
+end )
+
+function HH.Cl.ActiveCalls()
+    local now = CurTime()
+    for i = #HH.Cl.Calls, 1, -1 do
+        if now - HH.Cl.Calls[i].at > CALL_SHOW_TIME then
+            table.remove( HH.Cl.Calls, i )
+        end
+    end
+
+    return HH.Cl.Calls, CALL_SHOW_TIME
+end
+
+local function breathBehind()
+    local ply = LocalPlayer()
+    local path = HH.RandomSound( HH.Sounds.breath )
+    if not IsValid( ply ) or not path then return end
+
+    local back = -ply:GetAimVector()
+    back.z = 0
+    back:Normalize()
+    sound.Play( path, ply:EyePos() + back * BREATH_BEHIND, 60, math.random( 80, 92 ), 0.6 )
+end
+
+local STAGE_MESSAGES = {
+    [HH.STAGE_REGROUP] = function() return "You're alone out here. Find the others." end,
+    [HH.STAGE_TO_CABIN] = function() return "Get to " .. GetGlobal2String( "HH_CabinName", "the cabin" ) .. "." end,
+    [HH.STAGE_PREPARE] = function() return "Get the power on. Board it up. The fuses and planks are out there somewhere." end,
+}
+
 --[[ Cues from the server ]]
 
 HH.Cl.EncounterAt = 0
@@ -392,6 +448,23 @@ net.Receive( "HH_Cue", function()
         if HH.ShowMessage then
             HH.ShowMessage( "The lights are on.", 4 )
         end
+    elseif id == HH.CUE_STAGE then
+        -- The stage global can land a moment after the cue; read it shortly after.
+        timer.Simple( 0.2, function()
+            local words = STAGE_MESSAGES[HH.GetStage()]
+            if words and HH.ShowMessage then
+                HH.ShowMessage( words(), 6 )
+            end
+        end )
+    elseif id == HH.CUE_NOTICE then
+        HH.PlayFlat( HH.Sounds.stinger, 0.4, 75 )
+    elseif id == HH.CUE_BREATH then
+        breathBehind()
+    elseif id == HH.CUE_FLICKER then
+        HH.Flicker.untilTime = CurTime() + FLICKER_SIEGE
+    elseif id == HH.CUE_POWERCUT then
+        HH.Flicker.untilTime = CurTime() + FLICKER_POWER
+        HH.PlayFlat( HH.Sounds.powerCut, 0.7 )
     elseif id == HH.CUE_RETREAT then
         if HH.ShowMessage and LocalPlayer():GetPos():Distance( pos ) < 2500 then
             HH.ShowMessage( "It slips back into the dark. For now.", 4 )
@@ -428,12 +501,18 @@ hook.Add( "Think", "HorrorHelper_Atmosphere", function()
     if fear > 0.05 and now >= nextBeat then
         HH.PlayFlat( HH.Sounds.heartbeat, Lerp( fear, 0.35, 1 ) )
         nextBeat = now + Lerp( fear, HEARTBEAT_SLOW, HEARTBEAT_FAST )
+    elseif alive and HH.GetDread() > DREAD_PULSE_FROM and now >= nextBeat then
+        -- Late in the night your own pulse never quite settles.
+        HH.PlayFlat( HH.Sounds.heartbeat, DREAD_PULSE_VOLUME )
+        nextBeat = now + DREAD_PULSE_GAP * math.Rand( 0.9, 1.1 )
     end
 
     updateChase( fear > CHASE_THRESHOLD, dt )
 
     if now >= nextAmbient then
-        nextAmbient = now + math.Rand( AMBIENT_MIN_GAP, AMBIENT_MAX_GAP )
+        -- The woods get busier as the night gets worse.
+        local busier = Lerp( HH.GetDread(), 1, 0.45 )
+        nextAmbient = now + math.Rand( AMBIENT_MIN_GAP, AMBIENT_MAX_GAP ) * busier
 
         local path = HH.RandomSound( HH.Sounds.ambience )
         if path then

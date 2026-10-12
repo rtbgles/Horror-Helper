@@ -17,7 +17,7 @@ Drop this folder into `garrysmod/addons/` on the server. It uses only stock HL2/
    - **Door Barricade** / **Window Barricade**: an orange box shows the area the boards cover.
      Stand door ones on the floor of a doorway; put window ones over windows.
    - **Cabin Lamp**: lights up when the power is on.
-3. Stand in the **middle** of the cabin (survivors start here), type a name, press **Save cabin here**.
+3. Stand in the **middle** of the cabin, type a name, press **Save cabin here**.
    Radius 0 = worked out from the pieces. Save several cabins on one map and players vote between them.
 
 Run `nav_generate` on the map if it has no navmesh. Items and the killer are placed using it;
@@ -33,26 +33,52 @@ without one, placement falls back to rough traces that only suit open maps.
   `hh_cabin_save <name> [radius]`, `hh_cabin_edit <name>`, `hh_cabin_delete <name>`,
   `hh_cabin_list`, `hh_cabin_clear`.
 
-## How the director keeps it unpredictable
+## How a night plays out
+
+1. **Find each other.** Everyone wakes up scattered in the dark, far from the cabin
+   (`hh_regroup`, `hh_regroup_spread`, `hh_regroup_distance`). Survivors on their own call out
+   every 20-35 seconds; others hear it and see which way it came from. Bind a key to `hh_call`
+   to shout yourself.
+2. **Get to the cabin.** Once you're together (or after `hh_regroup_timeout`), the chosen
+   cabin is marked on screen with its distance. Once everyone is inside, the defense starts.
+   The marker stays up whenever you're away from it.
+3. **Hold out until sunrise.** Power the fuse boxes, board up doors and windows, survive the attacks.
+
+## The killer: when it shows up
 
 VJ NPCs on their own find the nearest player and run straight at them. Here the killer
-**doesn't exist on the map** until the director decides it should:
+**doesn't exist on the map** until the director decides it should. It shows itself by
+`hh_first_contact` seconds, then again and again, with the gap shrinking from
+`hh_contact_gap_max` to `hh_contact_gap_min` as dread rises. Each time it is one of:
 
-- **Scavenging (early night):** no killer. Survivors far from the cabin may get a **chance
-  encounter**: the killer appears out of sight on the far side from the cabin and gives chase.
-  The chase ends when the hunted survivor gets near the cabin (`hh_safe_margin`), the killer loses
-  everyone, or it runs too long (`hh_pursuit_max`). Then it vanishes as soon as nobody is looking.
-- **Siege:** when it first attacks the cabin is rolled each night: after a random amount of
-  setup progress (between `hh_siege_progress` and fully set up) plus a random delay, never before
-  `hh_siege_earliest` and always by `hh_siege_latest` (fractions of the night). It walks in from
-  the dark, bashes barricades (`hh_bash_damage`), and comes in through anything left open.
-- **Waves:** each attack lasts `hh_wave_min`-`hh_wave_max` seconds, or until the survivors deal
-  `hh_retreat_damage`. Then a quiet stretch (`hh_respite_*`) to repair and scavenge, and it
-  comes again. By default it can't die (`hh_killer_can_die 0`).
-- **Glimpses and phantoms:** one survivor at a time may see it standing far off in the trees
-  (gone when they look properly), or hear footsteps right behind them.
-- If it gets stuck somewhere it can't path from during a siege, it is simply at the boards
-  the next time nobody is watching.
+- **Stalking:** it stands out in the dark watching one survivor who is away from the cabin.
+  Stare too long or walk up to it and it turns and walks off, or (more often as the night wears on)
+  comes for you. Shoot it and it definitely comes for you.
+- **Chase:** it hunts a survivor from the far side of the cabin. The chase ends when they get
+  near the cabin (`hh_safe_margin`), it loses everyone, or `hh_pursuit_max` runs out.
+- **Prowling:** everyone is in the cabin, so it circles outside and tries a door or window once
+  or twice before leaving. Step outside near it at your own risk.
+- **Siege:** the real attack. Rolled each night: after a random amount of setup progress
+  (`hh_siege_progress` up to fully set up) plus a random delay, never before `hh_siege_earliest`,
+  always by `hh_siege_latest`. It bashes through barricades (`hh_bash_damage`) and comes in.
+  Waves last `hh_wave_min`-`hh_wave_max` seconds or until you deal `hh_retreat_damage`, then a
+  quiet stretch (`hh_respite_*`). By default it can't die (`hh_killer_can_die 0`).
+
+## Dread: it gets worse
+
+Dread climbs from 0 to 1 over the night (`hh_dread_speed`), with how set up the cabin is,
+once the sieges start, and a little every time the killer appears. As it rises the fog
+closes in, colour drains, the screen edges darken, late at night you hear your own pulse,
+and the psychological scares come more often (`hh_psych_rate`, more when you're alone) and get nastier:
+
+| From dread | Scare |
+|---|---|
+| any | footsteps behind you; a glimpse of it standing far off (gone when you look properly) |
+| 0.30 | breathing right behind your head; the cabin lamps stutter |
+| 0.35 | your flashlight stutters; knocking on the boards from outside |
+| 0.55 | a teammate's voice calling from where no teammate is |
+| 0.70 | the power dies for a while |
+| 0.75 | a glimpse of it standing inside the cabin with you |
 
 Turn on `hh_debug 1` to see the director's decisions in the server console.
 

@@ -11,7 +11,7 @@ local NPC_HULL_MAXS = Vector( 18, 18, 72 )
 local PLAYER_HULL_MINS = Vector( -16, -16, 0 )
 local PLAYER_HULL_MAXS = Vector( 16, 16, 72 )
 local FALLBACK_TRACE_HEIGHT = 1024
-local LOCAL_SEARCH_MAX = 4000 -- searches this small walk the navmesh around the centre instead of sampling the whole map
+local LOCAL_SEARCH_MAX = 6000 -- searches this small walk the navmesh around the centre instead of sampling the whole map
 local NAV_STEP = 1000
 
 function HH.Debug( ... )

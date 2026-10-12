@@ -465,9 +465,14 @@ function HH.BeginRound()
     scatterItems( cabin, "hh_fuse", fuseCount )
     scatterItems( cabin, "hh_planks", plankCount )
 
-    -- Everyone starts at the cabin.
+    -- Scattered in the dark (they have to find each other first), or at the cabin.
+    local players = player.GetAll()
+    local scatter = HH.CV.regroup:GetBool() and HH.ScatterSpots( cabin, players ) or nil
+    S.scattered = scatter ~= nil
+    HH.SetStage( HH.STAGE_NONE )
+
     local taken = {}
-    for _, ply in player.Iterator() do
+    for i, ply in ipairs( players ) do
         S.roster[ply] = true
         ply:SetNW2Bool( "HH_Out", false )
         ply:SetNW2Bool( "HH_Ready", false )
@@ -481,9 +486,11 @@ function HH.BeginRound()
         ply:Spawn()
         giveLoadout( ply )
 
-        local spot = HH.FindPlayerSpot( cabin.center, taken )
+        local spot = scatter and scatter[i] or HH.FindPlayerSpot( cabin.center, taken )
         table.insert( taken, spot )
         ply:SetPos( spot )
+        -- Face the cabin's general direction so nobody starts staring into a wall.
+        ply:SetEyeAngles( Angle( 0, ( cabin.center - spot ):Angle().y, 0 ) )
     end
 
     if HH.CV.darkness:GetBool() then
@@ -536,6 +543,7 @@ function HH.StartNight()
     SetGlobal2Float( "HH_NightStart", S.nightStart )
     SetGlobal2Float( "HH_NightLength", length )
     HH.SetPhase( HH.PHASE_NIGHT, S.nightStart + length )
+    HH.SetStage( S.scattered and HH.STAGE_REGROUP or HH.STAGE_PREPARE )
 
     HH.Director.Start()
 end
@@ -552,7 +560,10 @@ local function nightThink()
 
     if #HH.AlivePlayers() == 0 then
         HH.EndRound( HH.OUTCOME_KILLED )
+        return
     end
+
+    HH.StageThink()
 end
 
 function HH.EndRound( outcome )
@@ -598,6 +609,10 @@ function HH.Cleanup()
     local roster = S.roster or {}
     S.roster = {}
     HH.SetPhase( HH.PHASE_IDLE )
+    HH.SetStage( HH.STAGE_NONE )
+    HH.ResetStages()
+    SetGlobal2Float( "HH_Dread", 0 )
+    SetGlobal2Float( "HH_PowerCutUntil", 0 )
     SetGlobal2Bool( "HH_Power", false )
     SetGlobal2Entity( "HH_Killer", NULL )
 

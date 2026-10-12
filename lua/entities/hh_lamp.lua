@@ -53,6 +53,7 @@ if CLIENT then
 
     function ENT:Think()
         if HH.GetPhase() ~= HH.PHASE_NIGHT or not GetGlobal2Bool( "HH_Power", false ) then return end
+        if CurTime() < GetGlobal2Float( "HH_PowerCutUntil", 0 ) then return end
         if HH.IsLampFlickering and HH.IsLampFlickering( self ) then return end
 
         local light = DynamicLight( self:EntIndex() + LIGHT_ID_OFFSET )
