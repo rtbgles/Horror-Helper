@@ -23,6 +23,7 @@ local INTRO_SPOT_MAX = 1400 -- ...and no further
 local NORMAL_LIGHT_STYLE = "m"
 local FUSE_CARRY_LIMIT = 10
 local LIGHTS_JOIN_DELAY = 5
+local LOBBY_INPUT_COOLDOWN = 0.25 -- ready/vote clicks per player
 local MAX_BODYGROUPS_SENT = 63
 
 util.AddNetworkString( "HH_Cabins" )
@@ -236,11 +237,14 @@ end
 local function lobbyThink()
     if HH.GetPhase() ~= HH.PHASE_LOBBY then return end
 
+    -- Bots can't click Ready, so they count as ready; at least one human must be.
     local total, ready = 0, 0
     for _, ply in player.Iterator() do
-        total = total + 1
-        if ply:GetNW2Bool( "HH_Ready", false ) then
-            ready = ready + 1
+        if not ply:IsBot() then
+            total = total + 1
+            if ply:GetNW2Bool( "HH_Ready", false ) then
+                ready = ready + 1
+            end
         end
     end
 
@@ -291,6 +295,8 @@ net.Receive( "HH_Lobby", function( _, ply )
     end
 
     if HH.GetPhase() ~= HH.PHASE_LOBBY then return end
+    if ( ply.hhNextLobbyInput or 0 ) > CurTime() then return end
+    ply.hhNextLobbyInput = CurTime() + LOBBY_INPUT_COOLDOWN
 
     if action == LOBBY_ACTION_READY then
         ply:SetNW2Bool( "HH_Ready", net.ReadBool() )
@@ -572,6 +578,12 @@ function HH.EndRound( outcome )
     timer.Remove( "HorrorHelper_IntroEnd" )
     HH.Director.Stop()
 
+    -- Who actually made it (late joiners and the dead don't count).
+    for _, ply in player.Iterator() do
+        local made = outcome == HH.OUTCOME_SURVIVED and S.roster[ply] and ply:Alive() and not HH.IsOut( ply )
+        ply:SetNW2Bool( "HH_Survived", made and true or false )
+    end
+
     SetGlobal2Int( "HH_Outcome", outcome )
     HH.SetPhase( HH.PHASE_RESULTS, CurTime() + HH.RESULTS_LENGTH )
 
@@ -619,6 +631,7 @@ function HH.Cleanup()
     for _, ply in player.Iterator() do
         local wasPlaying = roster[ply] or HH.IsOut( ply )
         ply:SetNW2Bool( "HH_Out", false )
+        ply:SetNW2Bool( "HH_Survived", false )
         ply:SetNW2Int( "HH_Fuses", 0 )
         ply:SetNW2Int( "HH_Planks", 0 )
 

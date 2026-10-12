@@ -14,6 +14,58 @@ local function sendSet( name, value )
     end )
 end
 
+--[[
+    Keeping the menu honest: another admin (or the server console) can change a setting while
+    this menu is open. Once a second, each control catches up with the server's value unless
+    you're in the middle of editing it or your own change is still on its way.
+]]
+local SYNC_INTERVAL = 1
+
+local function isSending( name )
+    return timer.Exists( "HorrorHelper_Set_" .. name )
+end
+
+local function syncControl( entry )
+    local cvar = GetConVar( entry.name )
+    local control = entry.control
+    if not cvar or not IsValid( control ) or isSending( entry.name ) then return end
+
+    if entry.kind == "bool" then
+        if control:GetChecked() ~= cvar:GetBool() then
+            control:SetChecked( cvar:GetBool() )
+        end
+    elseif entry.kind == "number" then
+        if not control:IsEditing() and math.abs( control:GetValue() - cvar:GetFloat() ) > 0.001 then
+            control.hhSyncing = true
+            control:SetValue( cvar:GetFloat() )
+            control.hhSyncing = false
+        end
+    elseif not control:IsEditing() and control:GetValue() ~= cvar:GetString() then
+        control:SetValue( cvar:GetString() )
+    end
+end
+
+local function track( cpanel, name, kind, control )
+    if not cpanel.hhSynced then
+        cpanel.hhSynced = {}
+
+        local syncer = vgui.Create( "Panel", cpanel )
+        syncer:SetTall( 0 )
+        syncer.hhNext = 0
+        syncer.Think = function( self )
+            if CurTime() < self.hhNext then return end
+            self.hhNext = CurTime() + SYNC_INTERVAL
+
+            for _, entry in ipairs( cpanel.hhSynced ) do
+                syncControl( entry )
+            end
+        end
+        cpanel:AddItem( syncer )
+    end
+
+    table.insert( cpanel.hhSynced, { name = name, kind = kind, control = control } )
+end
+
 local function adminGate( cpanel )
     if IsValid( LocalPlayer() ) and LocalPlayer():IsAdmin() then return true end
 
@@ -34,6 +86,7 @@ local function addSetting( cpanel, info )
             sendSet( info.name, checked and 1 or 0 )
         end
         cpanel:AddItem( box )
+        track( cpanel, info.name, "bool", box )
         return
     end
 
@@ -44,10 +97,13 @@ local function addSetting( cpanel, info )
         slider:SetDecimals( info.kind == "int" and 0 or 2 )
         slider:SetValue( cvar:GetFloat() )
         slider:SetDark( true )
-        slider.OnValueChanged = function( _, value )
+        slider.OnValueChanged = function( self, value )
+            if self.hhSyncing then return end
+
             sendSet( info.name, info.kind == "int" and math.Round( value ) or value )
         end
         cpanel:AddItem( slider )
+        track( cpanel, info.name, "number", slider )
         cpanel:ControlHelp( info.help )
         return
     end
@@ -60,6 +116,7 @@ local function addSetting( cpanel, info )
         sendSet( info.name, self:GetValue() )
     end
     cpanel:AddItem( entry )
+    track( cpanel, info.name, "string", entry )
 end
 
 local function addCategory( cpanel, category, skip )
@@ -81,6 +138,7 @@ local function addKillerPicker( cpanel )
         sendSet( "hh_killer_class", string.Trim( self:GetValue() ) )
     end
     cpanel:AddItem( classEntry )
+    track( cpanel, "hh_killer_class", "string", classEntry )
 
     local filter = vgui.Create( "DTextEntry", cpanel )
     filter:SetPlaceholderText( "Filter NPCs (name, category or class)..." )

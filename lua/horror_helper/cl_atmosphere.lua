@@ -67,11 +67,11 @@ local availableCache = {}
 
 -- Only the sounds in a list that exist on this client.
 function HH.AvailableSounds( list )
-    if isstring( list ) then list = { list } end
+    -- Keyed by the list itself (or the path string), so it's looked up once.
     if availableCache[list] then return availableCache[list] end
 
     local found = {}
-    for _, path in ipairs( list ) do
+    for _, path in ipairs( isstring( list ) and { list } or list ) do
         if file.Exists( "sound/" .. path, "GAME" ) then
             table.insert( found, path )
         end

@@ -362,7 +362,8 @@ hook.Add( "HUDPaint", "HorrorHelper_Intro", function()
         surface.SetDrawColor( 0, 0, 0, 255 )
         surface.DrawRect( 0, 0, w, h )
         if film then
-            HH.ShadowText( film.name, "HH_Title", w * 0.5, h * 0.45, titleColor, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER )
+            film.titleFont = film.titleFont or ( HH.UI.TextWidth( "HH_Title", film.name ) > w * 0.84 and "HH_Big" or "HH_Title" )
+            HH.ShadowText( film.name, film.titleFont, w * 0.5, h * 0.45, titleColor, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER )
             HH.ShadowText( "SURVIVE UNTIL SUNRISE", "HH_Small", w * 0.5, h * 0.55, subColor, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER )
         end
         return
@@ -380,14 +381,16 @@ hook.Add( "HUDPaint", "HorrorHelper_Intro", function()
         local letters = math.floor( ( t - K.TITLE_AT ) * K.TYPE_SPEED )
         local shown = string.sub( film.name, 1, letters )
         local x, y = w * 0.08, h * 0.66
+        -- A long name drops to the smaller title size rather than running off screen.
+        film.titleFont = film.titleFont or ( HH.UI.TextWidth( "HH_Title", film.name ) > w * 0.84 and "HH_Big" or "HH_Title" )
 
-        HH.ShadowText( shown, "HH_Title", x, y, titleColor, TEXT_ALIGN_LEFT, TEXT_ALIGN_BOTTOM )
+        HH.ShadowText( shown, film.titleFont, x, y, titleColor, TEXT_ALIGN_LEFT, TEXT_ALIGN_BOTTOM )
 
         if t >= K.SUBTITLE_AT then
             local a = math.Clamp( ( t - K.SUBTITLE_AT ) / 0.6, 0, 1 )
             surface.SetDrawColor( subColor.r, subColor.g, subColor.b, 255 * a )
             surface.DrawRect( x, y + h * 0.01, w * 0.22 * a, 2 )
-            HH.ShadowText( "SURVIVE UNTIL SUNRISE", "HH_Small", x, y + h * 0.02, ColorAlpha( subColor, 255 * a ), TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP )
+            HH.ShadowText( "SURVIVE UNTIL SUNRISE", "HH_Small", x, y + h * 0.02, HH.UI.Alpha( "introSub", subColor, 255 * a ), TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP )
         end
     end
 
