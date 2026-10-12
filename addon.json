@@ -1,6 +1,6 @@
 {
     "title": "Horror Helper: Until Sunrise",
-    "type": "gamemode",
+    "type": "servercontent",
     "tags": [ "fun", "roleplay" ],
     "ignore": [
         "*.md",
