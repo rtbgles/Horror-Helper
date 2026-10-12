@@ -54,6 +54,17 @@ local K = {
     KEY_LIGHT_ID = 0x4848, -- a cold key light on the killer so it reads in the dark
     KEY_LIGHT_SIZE = 260,
     KEY_LIGHT_BRIGHTNESS = 0.9,
+    -- A road flare burning in the grass by its feet: red light thrown up across it, on the
+    -- side the camera swings round, so it reads in the dark.
+    FLARE_LIGHT_ID = 0x484A,
+    FLARE_FORWARD = 50, -- in front of it...
+    FLARE_SIDE = 45, -- ...off to the camera's side...
+    FLARE_HEIGHT = 8, -- ...lying on the ground
+    FLARE_LIGHT_LIFT = 18, -- the light itself sits a little above the flare
+    FLARE_SIZE = 380,
+    FLARE_BRIGHTNESS = 2.4,
+    FLARE_FLICKER = 0.18, -- how much it gutters (share of brightness)
+    FLARE_SPRITE_SIZE = 26,
     FLASH_LIGHT_ID = 0x4849,
     FLASH_LIGHT_SIZE = 1400,
     FLASH_BRIGHTNESS = 5,
@@ -252,6 +263,9 @@ hook.Add( "Think", "HorrorHelper_Intro", function()
         film.side = chooseSide()
     end
 
+    -- The flare gutters: a few uneven sines, the same on every screen.
+    film.flareFlicker = 1 - K.FLARE_FLICKER * ( 0.5 + 0.3 * math.sin( t * 23 ) + 0.2 * math.sin( t * 37 + 1.3 ) )
+
     puppet:SetCycle( ( math.max( t, 0 ) / film.seqLength ) % 1 )
     puppet:InvalidateBoneCache()
 
@@ -270,6 +284,23 @@ hook.Add( "Think", "HorrorHelper_Intro", function()
         key.dietime = CurTime() + 0.1
     end
 
+    local flarePos = film.flarePos
+    if not flarePos then
+        local side = Angle( 0, film.yaw + 90 * film.side, 0 ):Forward()
+        flarePos = film.pos + fwd * K.FLARE_FORWARD + side * K.FLARE_SIDE + Vector( 0, 0, K.FLARE_HEIGHT )
+        film.flarePos = flarePos
+    end
+
+    local flare = DynamicLight( K.FLARE_LIGHT_ID )
+    if flare then
+        flare.pos = flarePos + Vector( 0, 0, K.FLARE_LIGHT_LIFT )
+        flare.r, flare.g, flare.b = 255, 30, 20
+        flare.brightness = K.FLARE_BRIGHTNESS * film.flareFlicker
+        flare.size = K.FLARE_SIZE
+        flare.decay = 1000
+        flare.dietime = CurTime() + 0.1
+    end
+
     local sinceFlash = t - K.THUNDER_AT
     if sinceFlash >= 0 and sinceFlash < K.FLASH_DECAY_TIME then
         local flash = DynamicLight( K.FLASH_LIGHT_ID )
@@ -286,6 +317,21 @@ hook.Add( "Think", "HorrorHelper_Intro", function()
     fireOnce( "thunder", t, K.THUNDER_AT, function()
         HH.PlayFlat( HH.Sounds.thunder, 0.8, math.random( 90, 100 ) )
     end )
+end )
+
+-- The flare itself: a hot core and a red bloom, so the light has a source on screen.
+local flareGlow = Material( "sprites/light_glow02_add" )
+local flareColor = Color( 255, 40, 25 )
+local flareCore = Color( 255, 200, 170 )
+
+hook.Add( "PostDrawTranslucentRenderables", "HorrorHelper_IntroFlare", function( _, drawingSkybox )
+    if drawingSkybox or not film or not film.flarePos then return end
+
+    local size = K.FLARE_SPRITE_SIZE * film.flareFlicker
+    flareColor.a = 220 * film.flareFlicker
+    render.SetMaterial( flareGlow )
+    render.DrawSprite( film.flarePos, size * 3, size * 3, flareColor )
+    render.DrawSprite( film.flarePos, size * 0.6, size * 0.6, flareCore )
 end )
 
 --[[ The camera ]]

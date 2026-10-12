@@ -14,12 +14,19 @@ local DAWN_FOG_DENSITY = 0.6
 local DAWN_FOG_STRETCH = 3 -- fog reaches this many times further at sunrise
 local DREAD_FOG_CLOSE = 0.6 -- at full dread the fog sits at this fraction of its normal distance
 local DREAD_PULSE_FROM = 0.7 -- above this dread you can hear your own pulse even with nothing near
-local DREAD_PULSE_GAP = 1.7
-local DREAD_PULSE_VOLUME = 0.22
+local DREAD_PULSE_VOLUME = 0.08
+local DREAD_PULSE_PITCH = 92
 
 local HEARTBEAT_RANGE = 1300
-local HEARTBEAT_SLOW = 1.15
-local HEARTBEAT_FAST = 0.38
+-- One heartbeat sound, kept playing and steered: louder and faster (higher pitch) the closer
+-- it is. Kept quiet and pitched up a little: at full volume and normal pitch it's mostly bass.
+local HEARTBEAT_VOLUME_MIN = 0.12
+local HEARTBEAT_VOLUME_MAX = 0.4
+local HEARTBEAT_PITCH_MIN = 100
+local HEARTBEAT_PITCH_MAX = 135
+local HEARTBEAT_FADE = 0.5
+local HEARTBEAT_STEER = 0.25 -- seconds to glide to a new volume/pitch
+local CHASE_MAX_VOLUME = 0.55
 local HIDDEN_KILLER_FACTOR = 0.45 -- near but out of sight still raises the pulse, less so
 local CHASE_THRESHOLD = 0.3
 local CHASE_FADE_SPEED = 0.6 -- volume per second
@@ -185,8 +192,63 @@ end )
 
 --[[ Heartbeat and chase music ]]
 
-local nextBeat = 0
-local chase = { channel = nil, loading = false, volume = 0, path = nil }
+-- Survive a Lua refresh without leaving the old sounds playing forever.
+if HH.Cl.Heart and HH.Cl.Heart.patch then
+    HH.Cl.Heart.patch:Stop()
+end
+if HH.Cl.Chase and IsValid( HH.Cl.Chase.channel ) then
+    HH.Cl.Chase.channel:Stop()
+end
+
+local heart = { patch = nil, stopAt = nil }
+HH.Cl.Heart = heart
+
+local function stopHeart()
+    if heart.patch then
+        heart.patch:Stop()
+    end
+
+    heart.patch = nil
+    heart.stopAt = nil
+end
+
+-- volume 0 fades it out and stops it; anything else keeps exactly one heartbeat going.
+local function updateHeart( volume, pitch )
+    local now = CurTime()
+
+    if volume <= 0 then
+        if heart.patch and not heart.stopAt then
+            heart.patch:ChangeVolume( 0, HEARTBEAT_FADE )
+            heart.stopAt = now + HEARTBEAT_FADE
+        elseif heart.stopAt and now >= heart.stopAt then
+            stopHeart()
+        end
+        return
+    end
+
+    heart.stopAt = nil
+
+    if not heart.patch then
+        local path = HH.RandomSound( HH.Sounds.heartbeat )
+        if not path then return end
+
+        heart.patch = CreateSound( LocalPlayer(), path )
+        heart.patch:SetSoundLevel( 0 )
+    end
+
+    -- A looping file just keeps going; a single beat is started again when it ends.
+    if heart.patch:IsPlaying() then
+        heart.patch:ChangeVolume( volume, HEARTBEAT_STEER )
+        heart.patch:ChangePitch( pitch, HEARTBEAT_STEER )
+    else
+        heart.patch:PlayEx( volume, pitch )
+    end
+end
+
+-- token: every request and every stop gets a new one, so a track that finishes loading
+-- after it was stopped (or after a newer request) is stopped instead of looping forever.
+local chase = { channel = nil, loading = false, volume = 0, path = nil, token = 0 }
+HH.Cl.Chase = chase
 
 local function stopChase()
     if IsValid( chase.channel ) then
@@ -196,6 +258,7 @@ local function stopChase()
     chase.channel = nil
     chase.loading = false
     chase.volume = 0
+    chase.token = chase.token + 1
 end
 
 local function updateChase( wanted, dt )
@@ -211,23 +274,31 @@ local function updateChase( wanted, dt )
 
     if chase.volume > 0 and not IsValid( chase.channel ) and not chase.loading then
         chase.loading = true
+        chase.token = chase.token + 1
+        local token = chase.token
 
         sound.PlayFile( "sound/" .. path, "noblock", function( channel )
-            chase.loading = false
-            if not IsValid( channel ) then return end
-            if chase.path ~= path or chase.volume <= 0 then
+            if not IsValid( channel ) then
+                if token == chase.token then
+                    chase.loading = false
+                end
+                return
+            end
+
+            if token ~= chase.token or IsValid( chase.channel ) or chase.volume <= 0 then
                 channel:Stop()
                 return
             end
 
+            chase.loading = false
             channel:EnableLooping( true )
-            channel:SetVolume( chase.volume )
+            channel:SetVolume( chase.volume * CHASE_MAX_VOLUME )
             chase.channel = channel
         end )
     end
 
     if IsValid( chase.channel ) then
-        chase.channel:SetVolume( chase.volume )
+        chase.channel:SetVolume( chase.volume * CHASE_MAX_VOLUME )
 
         if chase.volume <= 0 then
             stopChase()
@@ -487,7 +558,12 @@ hook.Add( "Think", "HorrorHelper_Atmosphere", function()
 
     if HH.GetPhase() ~= HH.PHASE_NIGHT then
         fear = 0
-        stopChase()
+        if IsValid( chase.channel ) or chase.loading then
+            stopChase()
+        end
+        if heart.patch then
+            stopHeart()
+        end
         removeSighting()
         return
     end
@@ -498,13 +574,13 @@ hook.Add( "Think", "HorrorHelper_Atmosphere", function()
     local target = alive and measureFear( ply ) or 0
     fear = math.Approach( fear, target, dt * 1.5 )
 
-    if fear > 0.05 and now >= nextBeat then
-        HH.PlayFlat( HH.Sounds.heartbeat, Lerp( fear, 0.35, 1 ) )
-        nextBeat = now + Lerp( fear, HEARTBEAT_SLOW, HEARTBEAT_FAST )
-    elseif alive and HH.GetDread() > DREAD_PULSE_FROM and now >= nextBeat then
-        -- Late in the night your own pulse never quite settles.
-        HH.PlayFlat( HH.Sounds.heartbeat, DREAD_PULSE_VOLUME )
-        nextBeat = now + DREAD_PULSE_GAP * math.Rand( 0.9, 1.1 )
+    if fear > 0.05 then
+        updateHeart( Lerp( fear, HEARTBEAT_VOLUME_MIN, HEARTBEAT_VOLUME_MAX ), Lerp( fear, HEARTBEAT_PITCH_MIN, HEARTBEAT_PITCH_MAX ) )
+    elseif alive and HH.GetDread() > DREAD_PULSE_FROM then
+        -- Late in the night your own pulse never quite settles: faint and slow.
+        updateHeart( DREAD_PULSE_VOLUME, DREAD_PULSE_PITCH )
+    else
+        updateHeart( 0 )
     end
 
     updateChase( fear > CHASE_THRESHOLD, dt )
