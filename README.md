@@ -112,3 +112,8 @@ All settings are on the menu pages, with what each one does.
 - A cabin is saved with the **map's** layout, in `data/horror_helper/<map>.json`.
 - Starting a round removes any loose setup pieces you placed by hand, so save first.
 - Pressing E on a door barricade also opens or closes the map's door behind it.
+
+## Also in this repository
+
+`paramedic_response/` is a separate addon (co-op paramedic shifts with ragdoll crash victims).
+Copy that folder into `garrysmod/addons/` on its own; see its README.

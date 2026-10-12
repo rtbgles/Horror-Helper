@@ -1,0 +1,9 @@
+{
+    "title": "Paramedic Response",
+    "type": "servercontent",
+    "tags": [ "fun", "roleplay" ],
+    "ignore": [
+        "*.md",
+        ".git*"
+    ]
+}

@@ -4,6 +4,7 @@
     "tags": [ "fun", "roleplay" ],
     "ignore": [
         "*.md",
-        ".git*"
+        ".git*",
+        "paramedic_response/*"
     ]
 }
